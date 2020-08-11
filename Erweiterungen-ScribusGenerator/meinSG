@@ -1,0 +1,185 @@
+#!/bin/bash
+
+###------------------------------------------------------------------------------------#
+###
+###
+###
+### Aufruf: ~$> scriptname xyz start stop
+###
+###
+### Funktion: erstellt Seriendruckdaten, die vorher mit Scribus angelegt wurden
+###
+###
+### Kommandozeilenparameter: xyz - Dateiname der Seriendruckdateivorlage ohne Extension
+###                          start - Erste Zeile der zu verarbeitenden CSV-Daten
+###                          stop - Letzte Zeile der zu verarbeitenden CSV-Daten
+###
+### (c) Robert Johnen
+###------------------------------------------------------------------------------------#
+#---------------------------------- Scriptoptionen ------------------------------------#
+###------------------------------------------------------------------------------------#
+#
+#set -x					# Echo fuer jeden Befehl zum Debuggen
+#set -n					# Befehle nur lesen, nicht ausfueheren (dry run)
+#set +i					# erzwinge interaktive Shell
+#set -e					# sofortiger Stop wenn $?<>0
+#set -m					# Job-Kontrolle erzwingen
+#set -u					# undeklarierte Variablen als Fehler behandeln
+
+###------------------------------------------------------------------------------------#
+#----------------------- Deklaration von globalen Konstanten --------------------------#
+###------------------------------------------------------------------------------------#
+#
+declare -r E_OK=0				# ohne Fehler --> alles ok
+declare -r E_GENERAL=1				# Division durch 0 oder unerlaubte Funktion
+declare -r E_EMPTY=2				# fehlendes Schluesselwort, Kommando oder fehlende Berechtigung
+declare -r E_EXEC=126				# fehlende Berechtigung oder nicht ausfuehrbar
+declare -r E_CNOTFOUND=127			# Befehl nicht gefunden oder nicht im Pfad
+declare -r E_OOR=128				# Exit-Code nicht zwischen 0 und 255
+declare -r E_CTRLC=130				# Script wurde abgebrochen mit Strg-C
+
+###------------------------------------------------------------------------------------#
+#----------------------- Deklaration von globalen Variablen ---------------------------#
+###------------------------------------------------------------------------------------#
+#
+declare -a ARGS=($@)				# Alle Kommandozeilenparameter in ein Array einlesen
+declare ARGSCOUNT=$#				# Anzahl der Kommandozeilenparameter
+declare IFSTMP="${IFS}"				# urspruengliche Trennzeichen zwischenspeichern
+declare IFS=$'\t\n'				# Trennzeichen auf TAB und NEWLINE alleine
+declare SCRIPTNAME="${0##*/}"			# Scriptname feststellen
+declare KURZNAME="${SCRIPTNAME%%.*}"		# Scriptname ohne Erweiterung
+declare ERRCODE=0				# Fehlercode fur Fehler im Script Nullwert
+declare ZAEHLER					# einfache Zaehlervariable fuer Schleifen
+declare DATUM=`date +%Y%m%d`			# aktuelles Datum Format JJJJMMTT
+declare ZEIT=`date +%H%M%S`			# aktuelle Zeit Format HHMMSS
+declare ERROR=$E_OK
+declare LOKATION=""
+declare PFAD=""
+declare DATEINAME=""
+
+###------------------------------------------------------------------------------------#
+#--------------------------- bedingte Variablendeklarationen --------------------------#
+###------------------------------------------------------------------------------------#
+#
+#---- Wenn Debug-Modus (set -x) dann bitte am Prompt mit ein paar Diagnostik-Daten ----#
+[[ "$-" == *x* ]] && P4='$(read time junk < /proc/$$/schedstat; echo "@@@ $time @@@ " )'
+#
+###------------------------------------------------------------------------------------#
+#------------------------------------ Includefiles ------------------------------------#
+###------------------------------------------------------------------------------------#
+#
+# hier binde ich die Funktion testbinary aus der Datei ~/bin/testbinary.include ein
+# Sie testet auf optionale und unbedingt benoetigte (-b) Binaries / Shell-builtins / Scripte
+# fehlt ein unbedingt benoetigtes stoppt hier die Scriptausfuehrung mit der Ausgabe,
+# was den tatsaechlich fehlt. fehlt ~/bin/testbinary.include wirft das Script einen
+# Fehler, laeuft aber weiter,
+[ -e ~/bin/testbinary.include ] && source ~/bin/testbinary.include || echo "~/bin/testbinary.include not found"
+# wenn die Funktion nicht eingebunden wurde Fehler auswerfen, aber weiter machen
+declare -f testbinary > /dev/null && testbinary -b scribus locate dirname || echo "Function testbinary not found"
+#
+#[ -e "/Pfad/include.sh" ] && source /Pfad/include.sh || { 
+#	echo "/Pfad/include.sh nicht geladen" 
+#	exit $ERR 			# nur fuer notwendige Dateien
+#	}
+#
+###------------------------------------------------------------------------------------#
+#-------------------------------- Funktionsdeklarationen ------------------------------#
+###------------------------------------------------------------------------------------#
+#
+
+#
+#--------------------------------------------------------------------------------------#
+#------------------------------------ Hauptprogramm -----------------------------------#
+#--------------------------------------------------------------------------------------#
+# wenn mehr als ein Kommandozeilenargument angegeben wurde, dann
+if [ $ARGSCOUNT -gt 0 ]
+  then
+  # updaten der Dateidatenbank
+  sudo updatedb
+  # PDF-Betrachter festlegen
+  PDFBETRACHTER="okular"
+  # Ausgabedateiname
+  AUSGABEDATEI="${DATUM}${ZEIT}-${ARGS[0]}-SD"
+  # Vorlagendatei
+  DATEINAME="${ARGS[0]}.sla"
+  # datei mit den Seriendruckdaten
+  DRUCKDATEN="Seriendruckdaten/${ARGS[0]}.csv"
+  # Speicherort der Vorlagendatei feststellen (alle anderen Dateien werden 
+  # in dem Verzeichnis oder entsprechenden Unterverzeichnissen gesucht)
+  LOKATION=`locate "${DATEINAME}" | grep "${DATEINAME}"\$ `
+  #Pfad aus Speicherort extrahieren
+  PFAD=`dirname "${LOKATION}"`
+  # i den Pfad wechseln
+  cd "${PFAD}"
+  echo "ARBEITSVERZEICHNIS ${PFAD}"
+  echo "EINGABEDATEI       ${DATEINAME}"
+  echo "SERIENDRUCKDATEN   ${DRUCKDATEN}"
+  echo "PFAD               ${PFAD}"
+  # wenn das Verzeichnis Ausgabe nicht existiert, dann lege es an
+  [ -d Ausgabe ] || mkdir Ausgabe
+  case $ARGSCOUNT in
+    # wenn nur 1 Kommandozeilenargument, dann
+    1) echo "AUSGABEDATEI (SLA) ${AUSGABEDATEI}"
+       echo "AUSGABEDATEI (PDF) Ausgabe/${AUSGABEDATEI}"
+       # lege los mit dem Scribusgenerator
+       python2 ~/bin/scribus/ScribusGeneratorCLI.py "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s
+       ;;
+    # wenn zwei Kommandozeilenparameter dann aendere den Dateinamen der Ausgabedatei
+    2) AUSGABEDATEI="${AUSGABEDATEI}-${ARGS[1]}"
+       echo "AUSGABEDATEI (SLA) ${AUSGABEDATEI}"
+       echo "AUSGABEDATEI (PDF) Ausgabe/${AUSGABEDATEI}"
+       # lege los mit dem Scribusgenerator
+       python2 ~/bin/scribus/ScribusGeneratorCLI.py "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s -from ${ARGS[1]}
+       ;;
+    # wenn drei Kommandozeilenparameter dann aendere den Dateinamen der Ausgabedatei
+    3) AUSGABEDATEI="${AUSGABEDATEI}-${ARGS[1]}-${ARGS[2]}"
+       echo "AUSGABEDATEI (SLA) ${AUSGABEDATEI}"
+       echo "AUSGABEDATEI (PDF) Ausgabe/${AUSGABEDATEI}"
+       # lege los mit dem Scribusgenerator
+       python2 ~/bin/scribus/ScribusGeneratorCLI.py "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s -from ${ARGS[1]} -to ${ARGS[2]}
+       ;;
+    esac
+  # starte Scribus im Hintergrund (auf einem anderen Terminal, damit man nicht dazwischenfummeln kann ;-)
+  # deswegen der virtuelle FrameBuffer fuer X und generiere die PDF-Datei    
+  xvfb-run scribus "${AUSGABEDATEI}.sla" -g -ns -py ~/bin/scribus/meinSGpdf.py
+  # schmeisse die PDF-Datei ins verzeichnis Ausgabe und starte den PDF-Betrachter
+  mv "${AUSGABEDATEI}.pdf" Ausgabe/ && [ -x /usr/bin/${PDFBETRACHTER} ] && ${PDFBETRACHTER} Ausgabe/"${AUSGABEDATEI}.pdf" &
+else
+  # Kommandozeile ohne Parameter, dann
+  cat <<EOF
+
+  Aufruf mit
+  ~$> ${SCRIPTNAME} Datei(.sla) Starzeile Endzeile
+  
+  Datei (ohne Extension): Scribusdatei, die als Vorlage fuer den Seriendruck dient.
+  Die Datei wird per locate gesucht. Es wird dann in das Verzeichnis der Datei gewechselt.
+  Im Unterverzeichnis Seriendruckdaten/ wird dann eine CSV-Datei gleichen Namens erwartet,
+  welche die zu verarbeitenden Daten enthält. Startzeile und Endzeile sind optionale Parameter,
+  welche die zu verarbeitenden Zeilen der Datei angeben (von Startzeile bis Endzeile).
+  Wird nur eine Startzeile angegeben, wird die CSV-Datei ab dieser Zeile bis zum Ende 
+  verarbeitet. Wenn Startzeile und Endzeile nicht angegeben werden, wird die 
+  gesamte CSV-Datei mit allen Zeilen verarbeitet. Alle Voreinstellungen zum
+  generieren der PDF-Dateien werden aus der SLA-Vorlage übernommen.
+  
+  Es wird *eine* SLA-Datei mit aktuellem Datum und Uhrzeit angelegt. Bei Angabe von Start- und
+  Endzeile werden diese ebenfalls im Dateinamen der SLA-Datei eingesetzt.
+  Die Ausgabe der PDF-Seriendruckdaten erfolgt in das Unterverzeichnis Ausgabe/.
+  Zum Generieren der PDF-Dateien wird Scribus mit dem Parameter -g und eine Python-Script
+  gestartet. Ist Scribus mit dem Generieren der PDF-Datei fertig, beendet sich Scribus wieder..
+  Die ezeugte PDF-Datei wird danach mit Okular geöffnet.
+  
+  Benötigte Dateien: 
+  Scribusdateivorlage, 
+  Datentabelle (CSV) mit gleichem Dateinamen wie Vorlage im Unterverzeichnis Seriendruckdaten
+  
+  Benötigte Programme: 
+  Scribus, xvfb-run
+  
+  Benötigte Scripte:
+  ScribusGeneratorCLI.py, ScribusGeneratorBackend.py, meinSG.py, 
+
+EOF
+  ((ERROR=4))
+  fi
+exit $ERROR
+  
