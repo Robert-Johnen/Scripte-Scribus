@@ -62,7 +62,7 @@ declare DATEINAME=""
 ###------------------------------------------------------------------------------------#
 #
 #---- Wenn Debug-Modus (set -x) dann bitte am Prompt mit ein paar Diagnostik-Daten ----#
-[[ "$-" == *x* ]] && P4='$(read time junk < /proc/$$/schedstat; echo "@@@ $time @@@ " )'
+#[[ "$-" == *x* ]] && P4='$(read time junk < /proc/$$/schedstat; echo "@@@ $time @@@ " )'
 #
 ###------------------------------------------------------------------------------------#
 #------------------------------------ Includefiles ------------------------------------#
@@ -73,9 +73,9 @@ declare DATEINAME=""
 # fehlt ein unbedingt benoetigtes stoppt hier die Scriptausfuehrung mit der Ausgabe,
 # was den tatsaechlich fehlt. fehlt ~/bin/testbinary.include wirft das Script einen
 # Fehler, laeuft aber weiter,
-[ -e ~/bin/testbinary.include ] && source ~/bin/testbinary.include || echo "~/bin/testbinary.include not found"
+#[ -e ~/bin/testbinary.include ] && source ~/bin/testbinary.include || echo "~/bin/testbinary.include not found"
 # wenn die Funktion nicht eingebunden wurde Fehler auswerfen, aber weiter machen
-declare -f testbinary > /dev/null && testbinary -b scribus locate dirname || echo "Function testbinary not found"
+#declare -f testbinary > /dev/null && testbinary -b scribus locate dirname || echo "Function testbinary not found"
 #
 #[ -e "/Pfad/include.sh" ] && source /Pfad/include.sh || { 
 #	echo "/Pfad/include.sh nicht geladen" 
@@ -109,6 +109,7 @@ if [ $ARGSCOUNT -gt 0 ]
   LOKATION=`locate "${DATEINAME}" | grep "${DATEINAME}"\$ `
   #Pfad aus Speicherort extrahieren
   PFAD=`dirname "${LOKATION}"`
+  SGCLI=`locate ScribusGeneratorCLI.py | grep $HOME | head -n 1`
   # i den Pfad wechseln
   cd "${PFAD}"
   echo "ARBEITSVERZEICHNIS ${PFAD}"
@@ -122,26 +123,26 @@ if [ $ARGSCOUNT -gt 0 ]
     1) echo "AUSGABEDATEI (SLA) ${AUSGABEDATEI}"
        echo "AUSGABEDATEI (PDF) Ausgabe/${AUSGABEDATEI}"
        # lege los mit dem Scribusgenerator
-       python2 ~/bin/scribus/ScribusGeneratorCLI.py "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s
+       python2 "S{SGCLI}" "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s
        ;;
     # wenn zwei Kommandozeilenparameter dann aendere den Dateinamen der Ausgabedatei
     2) AUSGABEDATEI="${AUSGABEDATEI}-${ARGS[1]}"
        echo "AUSGABEDATEI (SLA) ${AUSGABEDATEI}"
        echo "AUSGABEDATEI (PDF) Ausgabe/${AUSGABEDATEI}"
        # lege los mit dem Scribusgenerator
-       python2 ~/bin/scribus/ScribusGeneratorCLI.py "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s -from ${ARGS[1]}
+       python2 "S{SGCLI}" "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s -from ${ARGS[1]}
        ;;
     # wenn drei Kommandozeilenparameter dann aendere den Dateinamen der Ausgabedatei
     3) AUSGABEDATEI="${AUSGABEDATEI}-${ARGS[1]}-${ARGS[2]}"
        echo "AUSGABEDATEI (SLA) ${AUSGABEDATEI}"
        echo "AUSGABEDATEI (PDF) Ausgabe/${AUSGABEDATEI}"
        # lege los mit dem Scribusgenerator
-       python2 ~/bin/scribus/ScribusGeneratorCLI.py "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s -from ${ARGS[1]} -to ${ARGS[2]}
+       python2 "S{SGCLI}" "${DATEINAME}" -m -o . -n "${AUSGABEDATEI}" -c "${DRUCKDATEN}" -s -from ${ARGS[1]} -to ${ARGS[2]}
        ;;
     esac
   # starte Scribus im Hintergrund (auf einem anderen Terminal, damit man nicht dazwischenfummeln kann ;-)
   # deswegen der virtuelle FrameBuffer fuer X und generiere die PDF-Datei    
-  xvfb-run scribus "${AUSGABEDATEI}.sla" -g -ns -py ~/bin/scribus/meinSGpdf.py
+  which xvfb-run && xvfb-run scribus "${AUSGABEDATEI}.sla" -g -ns -py ~/bin/scribus/meinSGpdf.py || scribus "${AUSGABEDATEI}.sla" -g -ns -py ~/bin/scribus/meinSGpdf.py
   # schmeisse die PDF-Datei ins verzeichnis Ausgabe und starte den PDF-Betrachter
   mv "${AUSGABEDATEI}.pdf" Ausgabe/ && [ -x /usr/bin/${PDFBETRACHTER} ] && ${PDFBETRACHTER} Ausgabe/"${AUSGABEDATEI}.pdf" &
 else

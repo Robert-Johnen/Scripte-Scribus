@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+
+[ -d ~/bin/scribus ] || mkdir -p ~/bin/scribus
+
+cp -t ~/bin/scribus *.py meinSG
+chmod u+x ~/bin/scribus/meinSG*.py ~/bin/scribus/meinSG
+ln -s ~/bin/scribus/meinSG ~/bin/meinSG
